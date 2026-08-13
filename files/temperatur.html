@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="utf-8">
+
+    <title>Temperaturen Bestensee</title>
+
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        .graph-block {
+            margin-bottom: 30px;
+        }
+
+        canvas {
+                display: block;
+                width: 100%;
+                height: 350px;
+                border: 1px solid #888;
+                box-sizing: border-box;
+            }
+
+            .graph-block {
+                width: 100%;
+                max-width: 1200px;
+                margin-bottom: 30px;
+            }
+        .controls button {
+                padding: 6px 12px;
+                margin-right: 4px;
+                cursor: pointer;
+            }
+
+        .controls button.active {
+                background: #555;
+                color: white;
+                font-weight: bold;
+            }
+    </style>
+</head>
+
+<body>
+
+<h1>Temperaturen Bestensee</h1>
+
+<div class="controls">
+    <button id="range-1h"
+            onclick="setRange('1h')">1 Stunde</button>
+
+    <button id="range-24h"
+            onclick="setRange('24h')">24 Stunden</button>
+
+    <button id="range-7d"
+            onclick="setRange('7d')">7 Tage</button>
+
+    <button id="range-30d"
+            onclick="setRange('30d')">30 Tage</button>
+
+    <button id="range-1y"
+            onclick="setRange('1y')">1 Jahr</button>
+</div>
+
+<div class="graph-block">
+    <h2>Außentemperatur</h2>
+    <canvas id="graph-aussen"></canvas>
+</div>
+
+<div class="graph-block">
+    <h2>Warmwasser</h2>
+    <canvas id="graph-warmwasser"></canvas>
+</div>
+
+<div class="graph-block">
+    <h2>Solar</h2>
+    <canvas id="graph-solar"></canvas>
+</div>
+
+<div class="graph-block">
+    <h2>Speicher</h2>
+    <canvas id="graph-speicher"></canvas>
+</div>
+
+
+<script>
+
+let currentRange;
+
+
+async function loadGraph(graph)
+{
+    const response = await fetch(
+        "/cgi-bin/tempread?graph=" +
+        graph +
+        "&range=" +
+        currentRange
+    );
+
+    return await response.json();
+}
+
+
+function drawGraph(canvasId, json)
+{
+    const canvas = document.getElementById(canvasId);
+    const displayWidth =
+    canvas.clientWidth;
+            const displayHeight =
+                canvas.clientHeight;
+
+            canvas.width =
+                displayWidth;
+
+            canvas.height =
+                displayHeight;
+
+            const ctx =
+                canvas.getContext("2d");
+
+            const width =
+                canvas.width;
+
+            const height =
+                canvas.height;
+
+    const marginLeft = 70;
+    const marginRight = 20;
+    const marginTop = 40;
+    const marginBottom = 50;
+
+    const graphWidth =
+        width - marginLeft - marginRight;
+
+    const graphHeight =
+        height - marginTop - marginBottom;
+
+
+    const sensor1 = json.sensor1;
+    const sensor2 = json.sensor2;
+
+    const data1 =
+        sensor1 ? sensor1.data : [];
+
+    const data2 =
+        sensor2 ? sensor2.data : [];
+
+
+    ctx.clearRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    if ((data1.length < 2) &&
+        (data2.length < 2)) {
+
+        ctx.fillStyle = "#000000";
+        ctx.font = "14px sans-serif";
+
+        ctx.fillText(
+            "Keine Daten vorhanden",
+            marginLeft,
+            marginTop + 20
+        );
+
+        return;
+    }
+
+
+    /*
+     * Alle vorhandenen Daten zusammenfassen,
+     * um die gemeinsame Y-Skalierung zu
+     * bestimmen.
+     */
+    const allData =
+        data1.concat(data2);
+
+
+    /*
+     * X-Achse immer über den vollständig
+     * ausgewählten Zeitraum darstellen.
+     */
+    const maxTime =
+        Math.floor(Date.now() / 1000);
+
+    let minTime;
+
+
+    switch (currentRange) {
+
+        case "1h":
+
+            minTime =
+                maxTime - 60 * 60;
+
+            break;
+
+
+        case "24h":
+
+            minTime =
+                maxTime - 24 * 60 * 60;
+
+            break;
+
+
+        case "7d":
+
+            minTime =
+                maxTime - 7 * 24 * 60 * 60;
+
+            break;
+
+
+        case "30d":
+
+            minTime =
+                maxTime - 30 * 24 * 60 * 60;
+
+            break;
+
+
+        case "1y":
+
+            minTime =
+                maxTime - 365 * 24 * 60 * 60;
+
+            break;
+
+
+        default:
+
+            minTime =
+                maxTime - 60 * 60;
+
+            break;
+    }
+
+
+    /*
+     * Y-Bereich aus den tatsächlich
+     * vorhandenen Messdaten bestimmen.
+     */
+    let minTemp = allData[0][1];
+    let maxTemp = allData[0][1];
+
+
+    for (const point of allData) {
+
+        if (point[1] < minTemp) {
+            minTemp = point[1];
+        }
+
+        if (point[1] > maxTemp) {
+            maxTemp = point[1];
+        }
+    }
+
+
+    /*
+     * Etwas Abstand oberhalb und
+     * unterhalb der Messwerte.
+     */
+    minTemp =
+        Math.floor(minTemp - 1);
+
+    maxTemp =
+        Math.ceil(maxTemp + 1);
+
+
+    if (minTemp === maxTemp) {
+        minTemp -= 1;
+        maxTemp += 1;
+    }
+
+
+    ctx.font = "12px sans-serif";
+
+
+    /*
+     * Horizontales Gitter und Y-Achse.
+     */
+    const ySteps = 5;
+
+    ctx.lineWidth = 1;
+
+
+    for (let i = 0; i <= ySteps; i++) {
+
+        const value =
+            minTemp +
+            (maxTemp - minTemp) *
+            i / ySteps;
+
+        const y =
+            marginTop +
+            graphHeight -
+            graphHeight *
+            i / ySteps;
+
+
+        ctx.strokeStyle = "#cccccc";
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            marginLeft,
+            y
+        );
+
+        ctx.lineTo(
+            width - marginRight,
+            y
+        );
+
+        ctx.stroke();
+
+
+        ctx.fillStyle = "#000000";
+
+        ctx.fillText(
+            value.toFixed(1) + " °C",
+            5,
+            y + 4
+        );
+    }
+
+
+    /*
+     * Senkrechtes Gitter und X-Achse.
+     */
+    const xSteps = 6;
+
+
+    for (let i = 0; i <= xSteps; i++) {
+
+        const timestamp =
+            minTime +
+            (maxTime - minTime) *
+            i / xSteps;
+
+        const x =
+            marginLeft +
+            graphWidth *
+            i / xSteps;
+
+
+        ctx.strokeStyle = "#eeeeee";
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x,
+            marginTop
+        );
+
+        ctx.lineTo(
+            x,
+            height - marginBottom
+        );
+
+        ctx.stroke();
+
+
+        const date =
+            new Date(
+                timestamp * 1000
+            );
+
+
+        /*
+         * Beschriftung abhängig vom
+         * gewählten Zeitraum.
+         */
+        let text;
+
+
+        switch (currentRange) {
+
+            case "1h":
+            case "24h":
+
+                text =
+                    date.toLocaleTimeString(
+                        "de-DE",
+                        {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                        }
+                    );
+
+                break;
+
+
+            case "7d":
+            case "30d":
+
+                text =
+                    date.toLocaleDateString(
+                        "de-DE",
+                        {
+                            day: "2-digit",
+                            month: "2-digit"
+                        }
+                    );
+
+                break;
+
+
+            case "1y":
+
+                text =
+                    date.toLocaleDateString(
+                        "de-DE",
+                        {
+                            month: "2-digit",
+                            year: "2-digit"
+                        }
+                    );
+
+                break;
+
+
+            default:
+
+                text =
+                    date.toLocaleTimeString(
+                        "de-DE",
+                        {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                        }
+                    );
+
+                break;
+        }
+
+
+        ctx.fillStyle = "#000000";
+
+        ctx.fillText(
+            text,
+            x - 16,
+            height - 20
+        );
+    }
+
+
+    /*
+     * Eine Messkurve zeichnen.
+     */
+    function drawLine(data, color)
+    {
+        if (data.length < 2) {
+            return;
+        }
+
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+
+
+        for (let i = 0;
+             i < data.length;
+             i++) {
+
+            const time =
+                data[i][0];
+
+            const temp =
+                data[i][1];
+
+
+            const x =
+                marginLeft +
+                (time - minTime) /
+                (maxTime - minTime) *
+                graphWidth;
+
+
+            const y =
+                marginTop +
+                graphHeight -
+                (temp - minTemp) /
+                (maxTemp - minTemp) *
+                graphHeight;
+
+
+            if (i === 0) {
+
+                ctx.moveTo(
+                    x,
+                    y
+                );
+
+            } else {
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
+            }
+        }
+
+
+        ctx.stroke();
+    }
+
+
+    /*
+     * Sensor 1: rot.
+     */
+    drawLine(
+        data1,
+        "#cc0000"
+    );
+
+
+    /*
+     * Sensor 2: blau.
+     */
+    drawLine(
+        data2,
+        "#0066cc"
+    );
+
+
+    /*
+     * Legende.
+     */
+    let legendX =
+        marginLeft;
+
+
+    if (sensor1 != null) {
+
+        ctx.strokeStyle =
+            "#cc0000";
+
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            legendX,
+            18
+        );
+
+        ctx.lineTo(
+            legendX + 25,
+            18
+        );
+
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "#000000";
+
+        ctx.fillText(
+            sensor1.name,
+            legendX + 32,
+            22
+        );
+
+
+        legendX += 200;
+    }
+
+
+    if (sensor2 != null) {
+
+        ctx.strokeStyle =
+            "#0066cc";
+
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            legendX,
+            18
+        );
+
+        ctx.lineTo(
+            legendX + 25,
+            18
+        );
+
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "#000000";
+
+        ctx.fillText(
+            sensor2.name,
+            legendX + 32,
+            22
+        );
+    }
+}
+
+async function updateGraphs()
+{
+    const aussen =
+        await loadGraph("aussen");
+
+    drawGraph(
+        "graph-aussen",
+        aussen
+    );
+
+
+    const warmwasser =
+        await loadGraph("warmwasser");
+
+    drawGraph(
+        "graph-warmwasser",
+        warmwasser
+    );
+
+
+    const solar =
+        await loadGraph("solar");
+
+    drawGraph(
+        "graph-solar",
+        solar
+    );
+
+
+    const speicher =
+        await loadGraph("speicher");
+
+    drawGraph(
+        "graph-speicher",
+        speicher
+    );
+}
+
+
+function setRange(range)
+{
+    currentRange = range;
+
+    const buttons =
+        document.querySelectorAll(
+            ".controls button"
+        );
+
+    for (const button of buttons) {
+        button.classList.remove("active");
+    }
+
+    const activeButton =
+        document.getElementById(
+            "range-" + range
+        );
+
+    if (activeButton != null) {
+        activeButton.classList.add("active");
+    }
+
+    updateGraphs();
+}
+
+let resizeTimer;
+
+window.addEventListener(
+    "resize",
+    function()
+    {
+        clearTimeout(resizeTimer);
+
+        resizeTimer = setTimeout(
+            function()
+            {
+                updateGraphs();
+            },
+            150
+        );
+    }
+);
+setRange("1h");
+
+</script>
+
+</body>
+</html>
