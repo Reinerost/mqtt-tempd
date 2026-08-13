@@ -156,3 +156,13 @@ LeMaker Banana Pi M1 running OpenWrt 22.03.5.
 
 For other OpenWrt versions or target architectures, mqtt-tempd and
 the supplied RRDtool packages should be rebuilt from source. 
+
+## TODO
+
+- Handle creation of the configured RRD directory automatically.
+  Currently, the directory specified by `rrd.path` must exist before
+  `mqtt-tempd` is started.
+
+- Handle unavailable or not yet mounted storage gracefully.
+  This is especially relevant when the RRD database is stored on an
+  external disk that may be mounted after the daemon is started.
