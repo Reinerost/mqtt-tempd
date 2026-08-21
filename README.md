@@ -70,32 +70,101 @@ The configuration file is:
 /etc/config/mqtt-tempd
 ```
 
+### Web interface configuration
+
+The title shown in the browser and at the top of the web page is
+configured with:
+
+```uci
+config web
+    option sitename 'Temperaturen Bestensee'
+```
+
+The `sitename` value is used dynamically by the web interface.
+
+### Sensor configuration
+
 Example sensor configuration:
 
 ```uci
 config sensor
-    option topic '/temperaturen/sens/ww'
-    option name  'sens_ww'
-    option label 'Warmwasser'
-    option graph 'warmwasser'
+    option topic '/temperaturen/sens/sol_v'
+    option name 'sens_sol_v'
+    option label 'Solar Vorlauf'
+    option graphname 'Solar'
+
+config sensor
+    option topic '/temperaturen/sens/sol_r'
+    option name 'sens_sol_r'
+    option label 'Solar Rücklauf'
+    option graphname 'Solar'
 ```
 
 The options have the following purposes:
 
 - `topic` - MQTT topic from which the temperature value is received
 - `name` - internal sensor name and RRD database name
-- `label` - human-readable name used in the graphs
-- `graph` - assigns the sensor to a graph
+- `label` - human-readable sensor name used in the graph legend
+- `graphname` - graph title and assignment of the sensor to a graph
 
-Up to two sensors can be assigned to the same graph by using the
-same `graph` value.
+Sensors using the same `graphname` are displayed together in the
+same graph.
 
-The RRD storage directory is configured with:
+For example:
+
+```uci
+option graphname 'Solar'
+```
+
+on two sensor sections displays both sensors in one graph named
+`Solar`.
+
+Up to two sensors are currently displayed in one graph.
+
+The graph list is generated dynamically from the configured
+`graphname` values. Therefore no sensor or graph names need to be
+hard-coded in the HTML page or CGI script.
+
+Adding or changing graph groups normally requires only a change to
+the UCI configuration.
+
+## RRD storage
+
+The directory containing the RRD databases is configured separately:
 
 ```uci
 config rrd
-    option path '/var/lib/mqtt-tempd'
+    option path '/mnt/data/mqtt-tempd'
 ```
+
+The path may point to internal storage or to a mounted external
+filesystem.
+
+The configured directory must exist before `mqtt-tempd` is started.
+
+mqtt-tempd intentionally uses the configured path and does not
+currently create the directory automatically.
+
+Each configured sensor has its own RRD database.
+
+The database filename is derived from the sensor `name` option.
+
+For example:
+
+```uci
+option name 'sens_ww'
+```
+
+creates or uses:
+
+```text
+sens_ww.rrd
+```
+
+inside the configured RRD directory.
+
+The databases contain several consolidation levels so that
+temperature history can be retained efficiently over longer periods.
 
 ## Web interface
 
@@ -111,6 +180,24 @@ The web interface uses the OpenWrt uhttpd web server.
 If uhttpd is not already installed, it must be installed separately
 to use the browser-based graphs.
 
+The web page retrieves its configuration dynamically from
+`/etc/config/mqtt-tempd`.
+
+The following information is therefore not hard-coded in the HTML
+page:
+
+- site title
+- graph names
+- graph count
+- sensor assignments
+- sensor labels
+- RRD storage path
+
+The CGI script reads the configured graph names and sensor
+assignments directly from UCI.
+
+The browser creates the required graph areas dynamically.
+
 The graphs support the following time ranges:
 
 - 1 hour
@@ -119,35 +206,48 @@ The graphs support the following time ranges:
 - 30 days
 - 1 year
 
-The CGI script reads the RRD path, sensor names, labels and graph
-assignments directly from the UCI configuration.
+The graphical rendering is performed in the browser using
+HTML5 Canvas.
 
-This means that sensor configuration does not need to be duplicated
-in the CGI script.
+## CGI interface
 
-## RRD storage
+The CGI script can also be called directly.
 
-Temperature values are stored in RRD databases using RRDtool.
-
-Each configured sensor has its own RRD database. The database name
-is derived from the sensor `name` option.
-
-For example:
-
-```uci
-option name 'sens_ww'
-```
-
-creates/uses:
+To retrieve the configured site name and graph list:
 
 ```text
-sens_ww.rrd
+/cgi-bin/tempread?list=1
 ```
 
-inside the configured RRD directory.
+Example response:
 
-The databases contain several consolidation levels so that
-temperature history can be retained efficiently over longer periods.
+```json
+{
+    "sitename": "Temperaturen Bestensee",
+    "graphs": [
+        "Warmwasser",
+        "Solar",
+        "Speicher",
+        "Außentemperatur"
+    ]
+}
+```
+
+To retrieve data for a graph:
+
+```text
+/cgi-bin/tempread?graph=Solar&range=24h
+```
+
+Supported ranges are:
+
+```text
+1h
+24h
+7d
+30d
+1y
+```
 
 ## Notes
 
@@ -155,14 +255,12 @@ The included binary packages were built specifically for the tested
 LeMaker Banana Pi M1 running OpenWrt 22.03.5.
 
 For other OpenWrt versions or target architectures, mqtt-tempd and
-the supplied RRDtool packages should be rebuilt from source. 
+the supplied RRDtool packages should be rebuilt from source.
 
 ## TODO
 
-- Handle creation of the configured RRD directory automatically.
-  Currently, the directory specified by `rrd.path` must exist before
-  `mqtt-tempd` is started.
+- Consider improved handling of unavailable or not yet mounted RRD
+  storage.
 
-- Handle unavailable or not yet mounted storage gracefully.
-  This is especially relevant when the RRD database is stored on an
-  external disk that may be mounted after the daemon is started.
+- Consider automatic handling of the configured RRD directory.
+  Currently the directory specified by `rrd.path` must already exist.
