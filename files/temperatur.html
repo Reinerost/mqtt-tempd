@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
 
-    <title>Temperaturen Bestensee</title>
+    <title>Temperaturen</title>
 
     <style>
         body {
@@ -16,39 +16,36 @@
         }
 
         .graph-block {
+            width: 100%;
+            max-width: 1200px;
             margin-bottom: 30px;
         }
 
         canvas {
-                display: block;
-                width: 100%;
-                height: 350px;
-                border: 1px solid #888;
-                box-sizing: border-box;
-            }
+            display: block;
+            width: 100%;
+            height: 350px;
+            border: 1px solid #888;
+            box-sizing: border-box;
+        }
 
-            .graph-block {
-                width: 100%;
-                max-width: 1200px;
-                margin-bottom: 30px;
-            }
         .controls button {
-                padding: 6px 12px;
-                margin-right: 4px;
-                cursor: pointer;
-            }
+            padding: 6px 12px;
+            margin-right: 4px;
+            cursor: pointer;
+        }
 
         .controls button.active {
-                background: #555;
-                color: white;
-                font-weight: bold;
-            }
+            background: #555;
+            color: white;
+            font-weight: bold;
+        }
     </style>
 </head>
 
 <body>
 
-<h1>Temperaturen Bestensee</h1>
+<h1 id="sitename">Temperaturen</h1>
 
 <div class="controls">
     <button id="range-1h"
@@ -67,88 +64,188 @@
             onclick="setRange('1y')">1 Jahr</button>
 </div>
 
-<div class="graph-block">
-    <h2>Außentemperatur</h2>
-    <canvas id="graph-aussen"></canvas>
-</div>
-
-<div class="graph-block">
-    <h2>Warmwasser</h2>
-    <canvas id="graph-warmwasser"></canvas>
-</div>
-
-<div class="graph-block">
-    <h2>Solar</h2>
-    <canvas id="graph-solar"></canvas>
-</div>
-
-<div class="graph-block">
-    <h2>Speicher</h2>
-    <canvas id="graph-speicher"></canvas>
-</div>
+<div id="graphs"></div>
 
 
 <script>
 
 let currentRange;
+let graphList = [];
 
 
-async function loadGraph(graph)
+/*
+ * Konfiguration der Webseite laden.
+ *
+ * Das CGI liefert:
+ *
+ * {
+ *     "sitename":"...",
+ *     "graphs":[
+ *         "...",
+ *         "..."
+ *     ]
+ * }
+ */
+async function loadConfiguration()
 {
-    const response = await fetch(
-        "/cgi-bin/tempread?graph=" +
-        graph +
-        "&range=" +
-        currentRange
-    );
+    const response =
+        await fetch(
+            "/cgi-bin/tempread?list=1"
+        );
 
     return await response.json();
 }
 
 
+/*
+ * Messdaten eines Graphen laden.
+ */
+async function loadGraph(graph)
+{
+    const response =
+        await fetch(
+            "/cgi-bin/tempread?graph=" +
+            encodeURIComponent(graph) +
+            "&range=" +
+            currentRange
+        );
+
+    return await response.json();
+}
+
+
+/*
+ * Graph-Blöcke anhand der vom CGI gelieferten
+ * Konfiguration erzeugen.
+ */
+function createGraphs(configuration)
+{
+    const container =
+        document.getElementById("graphs");
+
+
+    container.replaceChildren();
+
+
+    graphList =
+        configuration.graphs || [];
+
+
+    for (let i = 0;
+         i < graphList.length;
+         i++) {
+
+        const graphName =
+            graphList[i];
+
+
+        const block =
+            document.createElement("div");
+
+        block.className =
+            "graph-block";
+
+
+        const heading =
+            document.createElement("h2");
+
+        heading.textContent =
+            graphName;
+
+
+        const canvas =
+            document.createElement("canvas");
+
+        canvas.id =
+            "graph-" + i;
+
+
+        block.appendChild(
+            heading
+        );
+
+        block.appendChild(
+            canvas
+        );
+
+        container.appendChild(
+            block
+        );
+    }
+}
+
+
+/*
+ * Einen Graphen zeichnen.
+ */
 function drawGraph(canvasId, json)
 {
-    const canvas = document.getElementById(canvasId);
+    const canvas =
+        document.getElementById(canvasId);
+
+
+    if (canvas == null) {
+        return;
+    }
+
+
     const displayWidth =
-    canvas.clientWidth;
-            const displayHeight =
-                canvas.clientHeight;
+        canvas.clientWidth;
 
-            canvas.width =
-                displayWidth;
+    const displayHeight =
+        canvas.clientHeight;
 
-            canvas.height =
-                displayHeight;
 
-            const ctx =
-                canvas.getContext("2d");
+    canvas.width =
+        displayWidth;
 
-            const width =
-                canvas.width;
+    canvas.height =
+        displayHeight;
 
-            const height =
-                canvas.height;
+
+    const ctx =
+        canvas.getContext("2d");
+
+    const width =
+        canvas.width;
+
+    const height =
+        canvas.height;
+
 
     const marginLeft = 70;
     const marginRight = 20;
     const marginTop = 40;
     const marginBottom = 50;
 
+
     const graphWidth =
-        width - marginLeft - marginRight;
+        width -
+        marginLeft -
+        marginRight;
 
     const graphHeight =
-        height - marginTop - marginBottom;
+        height -
+        marginTop -
+        marginBottom;
 
 
-    const sensor1 = json.sensor1;
-    const sensor2 = json.sensor2;
+    const sensor1 =
+        json.sensor1;
+
+    const sensor2 =
+        json.sensor2;
+
 
     const data1 =
-        sensor1 ? sensor1.data : [];
+        sensor1 ?
+        sensor1.data :
+        [];
 
     const data2 =
-        sensor2 ? sensor2.data : [];
+        sensor2 ?
+        sensor2.data :
+        [];
 
 
     ctx.clearRect(
@@ -162,8 +259,11 @@ function drawGraph(canvasId, json)
     if ((data1.length < 2) &&
         (data2.length < 2)) {
 
-        ctx.fillStyle = "#000000";
-        ctx.font = "14px sans-serif";
+        ctx.fillStyle =
+            "#000000";
+
+        ctx.font =
+            "14px sans-serif";
 
         ctx.fillText(
             "Keine Daten vorhanden",
@@ -189,7 +289,9 @@ function drawGraph(canvasId, json)
      * ausgewählten Zeitraum darstellen.
      */
     const maxTime =
-        Math.floor(Date.now() / 1000);
+        Math.floor(
+            Date.now() / 1000
+        );
 
     let minTime;
 
@@ -199,7 +301,8 @@ function drawGraph(canvasId, json)
         case "1h":
 
             minTime =
-                maxTime - 60 * 60;
+                maxTime -
+                60 * 60;
 
             break;
 
@@ -207,7 +310,8 @@ function drawGraph(canvasId, json)
         case "24h":
 
             minTime =
-                maxTime - 24 * 60 * 60;
+                maxTime -
+                24 * 60 * 60;
 
             break;
 
@@ -215,7 +319,8 @@ function drawGraph(canvasId, json)
         case "7d":
 
             minTime =
-                maxTime - 7 * 24 * 60 * 60;
+                maxTime -
+                7 * 24 * 60 * 60;
 
             break;
 
@@ -223,7 +328,8 @@ function drawGraph(canvasId, json)
         case "30d":
 
             minTime =
-                maxTime - 30 * 24 * 60 * 60;
+                maxTime -
+                30 * 24 * 60 * 60;
 
             break;
 
@@ -231,7 +337,8 @@ function drawGraph(canvasId, json)
         case "1y":
 
             minTime =
-                maxTime - 365 * 24 * 60 * 60;
+                maxTime -
+                365 * 24 * 60 * 60;
 
             break;
 
@@ -239,7 +346,8 @@ function drawGraph(canvasId, json)
         default:
 
             minTime =
-                maxTime - 60 * 60;
+                maxTime -
+                60 * 60;
 
             break;
     }
@@ -249,8 +357,11 @@ function drawGraph(canvasId, json)
      * Y-Bereich aus den tatsächlich
      * vorhandenen Messdaten bestimmen.
      */
-    let minTemp = allData[0][1];
-    let maxTemp = allData[0][1];
+    let minTemp =
+        allData[0][1];
+
+    let maxTemp =
+        allData[0][1];
 
 
     for (const point of allData) {
@@ -270,10 +381,14 @@ function drawGraph(canvasId, json)
      * unterhalb der Messwerte.
      */
     minTemp =
-        Math.floor(minTemp - 1);
+        Math.floor(
+            minTemp - 1
+        );
 
     maxTemp =
-        Math.ceil(maxTemp + 1);
+        Math.ceil(
+            maxTemp + 1
+        );
 
 
     if (minTemp === maxTemp) {
@@ -282,7 +397,8 @@ function drawGraph(canvasId, json)
     }
 
 
-    ctx.font = "12px sans-serif";
+    ctx.font =
+        "12px sans-serif";
 
 
     /*
@@ -293,7 +409,9 @@ function drawGraph(canvasId, json)
     ctx.lineWidth = 1;
 
 
-    for (let i = 0; i <= ySteps; i++) {
+    for (let i = 0;
+         i <= ySteps;
+         i++) {
 
         const value =
             minTemp +
@@ -307,7 +425,8 @@ function drawGraph(canvasId, json)
             i / ySteps;
 
 
-        ctx.strokeStyle = "#cccccc";
+        ctx.strokeStyle =
+            "#cccccc";
 
         ctx.beginPath();
 
@@ -324,10 +443,12 @@ function drawGraph(canvasId, json)
         ctx.stroke();
 
 
-        ctx.fillStyle = "#000000";
+        ctx.fillStyle =
+            "#000000";
 
         ctx.fillText(
-            value.toFixed(1) + " °C",
+            value.toFixed(1) +
+            " °C",
             5,
             y + 4
         );
@@ -340,7 +461,9 @@ function drawGraph(canvasId, json)
     const xSteps = 6;
 
 
-    for (let i = 0; i <= xSteps; i++) {
+    for (let i = 0;
+         i <= xSteps;
+         i++) {
 
         const timestamp =
             minTime +
@@ -353,7 +476,8 @@ function drawGraph(canvasId, json)
             i / xSteps;
 
 
-        ctx.strokeStyle = "#eeeeee";
+        ctx.strokeStyle =
+            "#eeeeee";
 
         ctx.beginPath();
 
@@ -376,10 +500,6 @@ function drawGraph(canvasId, json)
             );
 
 
-        /*
-         * Beschriftung abhängig vom
-         * gewählten Zeitraum.
-         */
         let text;
 
 
@@ -392,8 +512,11 @@ function drawGraph(canvasId, json)
                     date.toLocaleTimeString(
                         "de-DE",
                         {
-                            hour: "2-digit",
-                            minute: "2-digit"
+                            hour:
+                                "2-digit",
+
+                            minute:
+                                "2-digit"
                         }
                     );
 
@@ -407,8 +530,11 @@ function drawGraph(canvasId, json)
                     date.toLocaleDateString(
                         "de-DE",
                         {
-                            day: "2-digit",
-                            month: "2-digit"
+                            day:
+                                "2-digit",
+
+                            month:
+                                "2-digit"
                         }
                     );
 
@@ -421,8 +547,11 @@ function drawGraph(canvasId, json)
                     date.toLocaleDateString(
                         "de-DE",
                         {
-                            month: "2-digit",
-                            year: "2-digit"
+                            month:
+                                "2-digit",
+
+                            year:
+                                "2-digit"
                         }
                     );
 
@@ -435,8 +564,11 @@ function drawGraph(canvasId, json)
                     date.toLocaleTimeString(
                         "de-DE",
                         {
-                            hour: "2-digit",
-                            minute: "2-digit"
+                            hour:
+                                "2-digit",
+
+                            minute:
+                                "2-digit"
                         }
                     );
 
@@ -444,7 +576,8 @@ function drawGraph(canvasId, json)
         }
 
 
-        ctx.fillStyle = "#000000";
+        ctx.fillStyle =
+            "#000000";
 
         ctx.fillText(
             text,
@@ -464,7 +597,9 @@ function drawGraph(canvasId, json)
         }
 
 
-        ctx.strokeStyle = color;
+        ctx.strokeStyle =
+            color;
+
         ctx.lineWidth = 2;
 
         ctx.beginPath();
@@ -518,7 +653,7 @@ function drawGraph(canvasId, json)
 
 
     /*
-     * Sensor 1: rot.
+     * Sensor 1.
      */
     drawLine(
         data1,
@@ -527,7 +662,7 @@ function drawGraph(canvasId, json)
 
 
     /*
-     * Sensor 2: blau.
+     * Sensor 2.
      */
     drawLine(
         data2,
@@ -611,88 +746,129 @@ function drawGraph(canvasId, json)
     }
 }
 
+
+/*
+ * Alle konfigurierten Graphen aktualisieren.
+ */
 async function updateGraphs()
 {
-    const aussen =
-        await loadGraph("aussen");
+    for (let i = 0;
+         i < graphList.length;
+         i++) {
 
-    drawGraph(
-        "graph-aussen",
-        aussen
-    );
+        const graphName =
+            graphList[i];
 
+        const json =
+            await loadGraph(
+                graphName
+            );
 
-    const warmwasser =
-        await loadGraph("warmwasser");
-
-    drawGraph(
-        "graph-warmwasser",
-        warmwasser
-    );
-
-
-    const solar =
-        await loadGraph("solar");
-
-    drawGraph(
-        "graph-solar",
-        solar
-    );
-
-
-    const speicher =
-        await loadGraph("speicher");
-
-    drawGraph(
-        "graph-speicher",
-        speicher
-    );
+        drawGraph(
+            "graph-" + i,
+            json
+        );
+    }
 }
 
 
+/*
+ * Zeitraum auswählen.
+ */
 function setRange(range)
 {
-    currentRange = range;
+    currentRange =
+        range;
+
 
     const buttons =
         document.querySelectorAll(
             ".controls button"
         );
 
+
     for (const button of buttons) {
-        button.classList.remove("active");
+        button.classList.remove(
+            "active"
+        );
     }
+
 
     const activeButton =
         document.getElementById(
             "range-" + range
         );
 
+
     if (activeButton != null) {
-        activeButton.classList.add("active");
+        activeButton.classList.add(
+            "active"
+        );
     }
+
 
     updateGraphs();
 }
 
+
+/*
+ * Seite initialisieren.
+ */
+async function initialize()
+{
+    const configuration =
+        await loadConfiguration();
+
+
+    const sitename =
+        configuration.sitename ||
+        "Temperaturen";
+
+
+    document.title =
+        sitename;
+
+    document.getElementById(
+        "sitename"
+    ).textContent =
+        sitename;
+
+
+    createGraphs(
+        configuration
+    );
+
+
+    setRange(
+        "1h"
+    );
+}
+
+
 let resizeTimer;
+
 
 window.addEventListener(
     "resize",
     function()
     {
-        clearTimeout(resizeTimer);
-
-        resizeTimer = setTimeout(
-            function()
-            {
-                updateGraphs();
-            },
-            150
+        clearTimeout(
+            resizeTimer
         );
+
+        resizeTimer =
+            setTimeout(
+                function()
+                {
+                    updateGraphs();
+                },
+                150
+            );
     }
 );
-setRange("1h");
+
+
+initialize();
 
 </script>
 

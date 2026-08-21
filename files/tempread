@@ -5,20 +5,48 @@
 #
 # Liefert Temperaturdaten aus den RRD-Dateien als JSON.
 #
-# Aufruf:
-#   /cgi-bin/tempread?graph=solar&range=24h
+# Aufrufe:
+#
+#   /cgi-bin/tempread?list=1
+#
+# liefert:
+#
+#   {
+#       "sitename":"Temperaturen Bestensee",
+#       "graphs":[
+#           "Warmwasser",
+#           "Solar",
+#           "Speicher",
+#           "Außentemperatur"
+#       ]
+#   }
+#
+#
+#   /cgi-bin/tempread?graph=Solar&range=24h
+#
+# liefert die Messdaten des angegebenen Graphen.
 #
 
 echo "Content-Type: application/json"
 echo ""
 
-
-#
-# Parameter aus QUERY_STRING lesen
-#
-
 graph=""
 range="1h"
+list="0"
+
+
+urldecode()
+{
+    value="$1"
+
+    value="$(
+        printf '%s' "$value" |
+        sed 's/+/ /g;s/%/\\x/g'
+    )"
+
+    printf '%b' "$value"
+}
+
 
 OLDIFS="$IFS"
 IFS='&'
@@ -27,21 +55,23 @@ for parameter in $QUERY_STRING
 do
     case "$parameter" in
         graph=*)
-            graph="${parameter#graph=}"
+            graph="$(
+                urldecode "${parameter#graph=}"
+            )"
             ;;
 
         range=*)
             range="${parameter#range=}"
+            ;;
+
+        list=1)
+            list="1"
             ;;
     esac
 done
 
 IFS="$OLDIFS"
 
-
-#
-# Zeitraum festlegen
-#
 
 case "$range" in
     1h)
@@ -71,21 +101,20 @@ case "$range" in
 esac
 
 
-#
-# RRD-Verzeichnis aus UCI lesen
-#
-
-rrd_path="$(uci -q get mqtt-tempd.@rrd[0].path)"
-
-if [ -z "$rrd_path" ]; then
-    printf '{"error":"RRD path not configured"}\n'
-    exit 1
-fi
+rrd_path="$(
+    uci -q get mqtt-tempd.@rrd[0].path
+)"
 
 
-#
-# Einen Sensor als JSON ausgeben
-#
+json_string()
+{
+    printf '%s' "$1" |
+    sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e 's/	/\\t/g'
+}
+
 
 output_sensor()
 {
@@ -93,12 +122,19 @@ output_sensor()
     file="$2"
 
     printf '{'
-    printf '"name":"%s",' "$label"
+
+    printf '"name":"'
+    json_string "$label"
+    printf '",'
+
     printf '"data":'
 
     if [ ! -f "$file" ]; then
+
         printf '[]'
+
     else
+
         rrdtool fetch "$file" AVERAGE \
             --start "$start" 2>/dev/null |
         awk '
@@ -138,68 +174,183 @@ output_sensor()
 }
 
 
-#
-# Alle Sensoren eines Graphen ausgeben
-#
-
 output_graph()
 {
     wanted_graph="$1"
     count=0
 
-    for section in $(uci show mqtt-tempd |
-        sed -n 's/^mqtt-tempd\.\([^=]*\)=sensor$/\1/p')
+    if [ -z "$rrd_path" ]; then
+        printf '"error":"RRD path not configured"'
+        return
+    fi
+
+
+    for section in $(
+        uci show mqtt-tempd |
+        sed -n \
+            's/^mqtt-tempd\.\([^=]*\)=sensor$/\1/p'
+    )
     do
-        graph_name="$(uci -q get "mqtt-tempd.$section.graph")"
+        graph_name="$(
+            uci -q get \
+                "mqtt-tempd.$section.graphname"
+        )"
 
         if [ "$graph_name" != "$wanted_graph" ]; then
             continue
         fi
 
-        sensor_name="$(uci -q get "mqtt-tempd.$section.name")"
-        sensor_label="$(uci -q get "mqtt-tempd.$section.label")"
+
+        sensor_name="$(
+            uci -q get \
+                "mqtt-tempd.$section.name"
+        )"
+
+        sensor_label="$(
+            uci -q get \
+                "mqtt-tempd.$section.label"
+        )"
+
 
         if [ -z "$sensor_name" ]; then
             continue
         fi
 
+
         if [ -z "$sensor_label" ]; then
             sensor_label="$sensor_name"
         fi
+
 
         if [ "$count" -gt 0 ]; then
             printf ','
         fi
 
-        printf '"sensor%d":' "$((count + 1))"
+
+        printf '"sensor%d":' \
+            "$((count + 1))"
+
 
         output_sensor \
             "$sensor_label" \
             "$rrd_path/$sensor_name.rrd"
 
-        count=$((count + 1))
+
+        count="$((count + 1))"
+
 
         #
-        # Pro Graph maximal zwei Sensoren.
+        # Pro Graph werden maximal zwei
+        # Sensoren dargestellt.
         #
-
         if [ "$count" -ge 2 ]; then
             break
         fi
     done
-    
+
+
     if [ "$count" -eq 0 ]; then
         printf '"error":"Graph not configured"'
     fi
 }
 
 
-#
-# JSON ausgeben
-#
+output_list()
+{
+    sitename="$(
+        uci -q get mqtt-tempd.@web[0].sitename
+    )"
+
+
+    if [ -z "$sitename" ]; then
+        sitename="Temperaturen"
+    fi
+
+
+    printf '{'
+
+    printf '"sitename":"'
+    json_string "$sitename"
+    printf '",'
+
+    printf '"graphs":['
+
+
+    first=1
+    graph_list=""
+
+
+    for section in $(
+        uci show mqtt-tempd |
+        sed -n \
+            's/^mqtt-tempd\.\([^=]*\)=sensor$/\1/p'
+    )
+    do
+        graph_name="$(
+            uci -q get \
+                "mqtt-tempd.$section.graphname"
+        )"
+
+
+        if [ -z "$graph_name" ]; then
+            continue
+        fi
+
+
+        #
+        # Bereits ausgegebenen Graphnamen
+        # überspringen.
+        #
+        case "
+$graph_list
+" in
+            *"
+$graph_name
+"*)
+                continue
+                ;;
+        esac
+
+
+        graph_list="${graph_list}${graph_name}
+"
+
+
+        if [ "$first" -eq 0 ]; then
+            printf ','
+        fi
+
+
+        printf '"'
+        json_string "$graph_name"
+        printf '"'
+
+
+        first=0
+    done
+
+
+    printf ']'
+    printf '}\n'
+}
+
+
+if [ "$list" = "1" ]; then
+
+    output_list
+    exit 0
+
+fi
+
+
+if [ -z "$graph" ]; then
+
+    printf '{"error":"Graph not specified"}\n'
+    exit 0
+
+fi
+
 
 printf '{'
-
 output_graph "$graph"
-
 printf '}\n'
