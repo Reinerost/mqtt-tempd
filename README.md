@@ -1,64 +1,65 @@
 # mqtt-tempd
 
-MQTT temperature logger for OpenWrt with RRD storage and
-browser-based temperature graphs.
+MQTT temperature logger for OpenWrt with RRD storage and browser-based
+temperature graphs.
 
-The software receives temperature values via MQTT, stores them
-in RRD databases and provides a simple browser-based graphical
-display using uhttpd, a CGI script and HTML5 Canvas.
+The software receives temperature values via MQTT, stores them in RRD
+databases and provides a simple browser-based graphical display using
+uhttpd, a CGI script and luci-plot.
 
 ## Tested platform
 
 mqtt-tempd was developed and tested on:
 
-- LeMaker Banana Pi M1
-- OpenWrt 22.03.5 (r20134-5f15225c1e)
-- Target: `sunxi/cortexa7`
-- Architecture: `arm_cortex-a7_neon-vfpv4`
+-   LeMaker Banana Pi M1
+-   OpenWrt 24.10.8
+-   Target: `sunxi/cortexa7`
+-   Architecture: `arm_cortex-a7_neon-vfpv4`
 
 Other OpenWrt devices may work as well, but have not been tested.
 
 ## Packages
 
-Precompiled OpenWrt packages for the tested platform are included
-in the `packages/` directory.
+Precompiled OpenWrt packages for the tested platform are included in the
+`packages/` directory.
 
 The following packages must be installed:
 
-- `librrd`
-- `rrdtool`
-- `mqtt-tempd`
+-   `librrd-hl`
+-   `rrd-hl`
+-   `mqtt-tempd`
 
-The supplied `librrd` and `rrdtool` packages contain RRDtool 1.10.3.
+The supplied `librrd-hl` and `rrd-hl` packages provide the headless
+RRDtool build used by mqtt-tempd.
 
 The precompiled packages were built specifically for:
 
-- OpenWrt 22.03.5
-- Target `sunxi/cortexa7`
-- Architecture `arm_cortex-a7_neon-vfpv4`
+-   OpenWrt 24.10.8
+-   Target `sunxi/cortexa7`
+-   Architecture `arm_cortex-a7_neon-vfpv4`
 
-They should not be installed on devices using an incompatible
-OpenWrt release or target architecture.
+They should not be installed on devices using an incompatible OpenWrt
+release or target architecture.
 
 Install the packages in this order:
 
-```sh
-opkg install librrd_*.ipk
-opkg install rrdtool_*.ipk
+``` sh
+opkg install librrd-hl_*.ipk
+opkg install rrd-hl_*.ipk
 opkg install mqtt-tempd_*.ipk
 ```
 
-Additional dependencies required by these packages are expected
-to be available from the configured OpenWrt package repositories.
+Additional dependencies required by these packages are expected to be
+available from the configured OpenWrt package repositories.
 
-Individual SHA256 checksum files for the supplied packages are
-included in the `packages/` directory.
+Individual SHA256 checksum files for the supplied packages are included
+in the `packages/` directory.
 
 The checksums can be verified, for example, with:
 
-```sh
-sha256sum -c librrd.sha256
-sha256sum -c rrdtool.sha256
+``` sh
+sha256sum -c librrd-hl.sha256
+sha256sum -c rrd-hl.sha256
 sha256sum -c mqtt-tempd.sha256
 ```
 
@@ -66,7 +67,7 @@ sha256sum -c mqtt-tempd.sha256
 
 The configuration file is:
 
-```text
+``` text
 /etc/config/mqtt-tempd
 ```
 
@@ -75,7 +76,7 @@ The configuration file is:
 The title shown in the browser and at the top of the web page is
 configured with:
 
-```uci
+``` uci
 config web
     option sitename 'Temperaturen Bestensee'
 ```
@@ -86,7 +87,7 @@ The `sitename` value is used dynamically by the web interface.
 
 Example sensor configuration:
 
-```uci
+``` uci
 config sensor
     option topic '/temperaturen/sens/sol_v'
     option name 'sens_sol_v'
@@ -102,37 +103,36 @@ config sensor
 
 The options have the following purposes:
 
-- `topic` - MQTT topic from which the temperature value is received
-- `name` - internal sensor name and RRD database name
-- `label` - human-readable sensor name used in the graph legend
-- `graphname` - graph title and assignment of the sensor to a graph
+-   `topic` - MQTT topic from which the temperature value is received
+-   `name` - internal sensor name and RRD database name
+-   `label` - human-readable sensor name used in the graph legend
+-   `graphname` - graph title and assignment of the sensor to a graph
 
-Sensors using the same `graphname` are displayed together in the
-same graph.
+Sensors using the same `graphname` are displayed together in the same
+graph.
 
 For example:
 
-```uci
+``` uci
 option graphname 'Solar'
 ```
 
-on two sensor sections displays both sensors in one graph named
-`Solar`.
+on two sensor sections displays both sensors in one graph named `Solar`.
 
 Up to two sensors are currently displayed in one graph.
 
-The graph list is generated dynamically from the configured
-`graphname` values. Therefore no sensor or graph names need to be
-hard-coded in the HTML page or CGI script.
+The graph list is generated dynamically from the configured `graphname`
+values. Therefore no sensor or graph names need to be hard-coded in the
+HTML page or CGI script.
 
-Adding or changing graph groups normally requires only a change to
-the UCI configuration.
+Adding or changing graph groups normally requires only a change to the
+UCI configuration.
 
 ## RRD storage
 
 The directory containing the RRD databases is configured separately:
 
-```uci
+``` uci
 config rrd
     option path '/mnt/data/mqtt-tempd'
 ```
@@ -142,8 +142,8 @@ filesystem.
 
 The configured directory must exist before `mqtt-tempd` is started.
 
-mqtt-tempd intentionally uses the configured path and does not
-currently create the directory automatically.
+mqtt-tempd intentionally uses the configured path and does not currently
+create the directory automatically.
 
 Each configured sensor has its own RRD database.
 
@@ -151,63 +151,64 @@ The database filename is derived from the sensor `name` option.
 
 For example:
 
-```uci
+``` uci
 option name 'sens_ww'
 ```
 
 creates or uses:
 
-```text
+``` text
 sens_ww.rrd
 ```
 
 inside the configured RRD directory.
 
-The databases contain several consolidation levels so that
-temperature history can be retained efficiently over longer periods.
+The databases contain several consolidation levels so that temperature
+history can be retained efficiently over longer periods.
 
 ## Web interface
 
 The package installs the web interface as:
 
-```text
+``` text
 /www/temperatur.html
+/www/luci-plot.js
+/www/luci-plot.css
 /www/cgi-bin/tempread
 ```
 
 The web interface uses the OpenWrt uhttpd web server.
 
-If uhttpd is not already installed, it must be installed separately
-to use the browser-based graphs.
+If uhttpd is not already installed, it must be installed separately to
+use the browser-based graphs.
 
 The web page retrieves its configuration dynamically from
 `/etc/config/mqtt-tempd`.
 
-The following information is therefore not hard-coded in the HTML
-page:
+The following information is therefore not hard-coded in the HTML page:
 
-- site title
-- graph names
-- graph count
-- sensor assignments
-- sensor labels
-- RRD storage path
+-   site title
+-   graph names
+-   graph count
+-   sensor assignments
+-   sensor labels
+-   RRD storage path
 
-The CGI script reads the configured graph names and sensor
-assignments directly from UCI.
+The CGI script reads the configured graph names and sensor assignments
+directly from UCI.
 
 The browser creates the required graph areas dynamically.
 
 The graphs support the following time ranges:
 
-- 1 hour
-- 24 hours
-- 7 days
-- 30 days
-- 1 year
+-   1 hour
+-   24 hours
+-   7 days
+-   30 days
+-   1 year
 
-The graphical rendering is performed in the browser using
-HTML5 Canvas.
+The graphical rendering is performed in the browser using `luci-plot.js`
+and `luci-plot.css`.
 
 ## CGI interface
 
@@ -215,13 +216,13 @@ The CGI script can also be called directly.
 
 To retrieve the configured site name and graph list:
 
-```text
+``` text
 /cgi-bin/tempread?list=1
 ```
 
 Example response:
 
-```json
+``` json
 {
     "sitename": "Temperaturen Bestensee",
     "graphs": [
@@ -235,13 +236,37 @@ Example response:
 
 To retrieve data for a graph:
 
-```text
+``` text
 /cgi-bin/tempread?graph=Solar&range=24h
+```
+
+The CGI script uses RRDtool `xport --json`. All sensors assigned to the
+requested graph are exported together in a single `xport` operation.
+
+Example response:
+
+``` json
+{
+    "about": "RRDtool graph JSON output",
+    "meta": {
+        "start": 1789548420,
+        "end": 1789552020,
+        "step": 60,
+        "legend": [
+            "Solar Vorlauf",
+            "Solar Rücklauf"
+        ]
+    },
+    "data": [
+        [23.95, 25.54],
+        [23.94, 25.46]
+    ]
+}
 ```
 
 Supported ranges are:
 
-```text
+``` text
 1h
 24h
 7d
@@ -252,15 +277,15 @@ Supported ranges are:
 ## Notes
 
 The included binary packages were built specifically for the tested
-LeMaker Banana Pi M1 running OpenWrt 22.03.5.
+LeMaker Banana Pi M1 running OpenWrt 24.10.8.
 
-For other OpenWrt versions or target architectures, mqtt-tempd and
-the supplied RRDtool packages should be rebuilt from source.
+For other OpenWrt versions or target architectures, mqtt-tempd and the
+supplied RRDtool packages should be rebuilt from source.
 
 ## TODO
 
-- Consider improved handling of unavailable or not yet mounted RRD
-  storage.
+-   Consider improved handling of unavailable or not yet mounted RRD
+    storage.
 
-- Consider automatic handling of the configured RRD directory.
-  Currently the directory specified by `rrd.path` must already exist.
+-   Consider automatic handling of the configured RRD directory.
+    Currently the directory specified by `rrd.path` must already exist.
