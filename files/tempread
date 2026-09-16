@@ -116,71 +116,18 @@ json_string()
 }
 
 
-output_sensor()
-{
-    label="$1"
-    file="$2"
-
-    printf '{'
-
-    printf '"name":"'
-    json_string "$label"
-    printf '",'
-
-    printf '"data":'
-
-    if [ ! -f "$file" ]; then
-
-        printf '[]'
-
-    else
-
-        rrdtool fetch "$file" AVERAGE \
-            --start "$start" 2>/dev/null |
-        awk '
-            BEGIN {
-                printf "["
-                first = 1
-            }
-
-            /^[0-9]+:/ {
-                timestamp = $1
-                sub(/:$/, "", timestamp)
-
-                value = $2
-
-                if ((value != "nan") &&
-                    (value != "-nan")) {
-
-                    if (!first) {
-                        printf ","
-                    }
-
-                    printf "[%s,%s]",
-                           timestamp,
-                           value
-
-                    first = 0
-                }
-            }
-
-            END {
-                printf "]"
-            }
-        '
-    fi
-
-    printf '}'
-}
-
-
 output_graph()
 {
     wanted_graph="$1"
     count=0
 
+    sensor_file1=""
+    sensor_file2=""
+    sensor_label1=""
+    sensor_label2=""
+
     if [ -z "$rrd_path" ]; then
-        printf '"error":"RRD path not configured"'
+        printf '{"error":"RRD path not configured"}'
         return
     fi
 
@@ -222,21 +169,28 @@ output_graph()
         fi
 
 
-        if [ "$count" -gt 0 ]; then
-            printf ','
+        sensor_file="$rrd_path/$sensor_name.rrd"
+
+        if [ ! -f "$sensor_file" ]; then
+            continue
         fi
 
 
-        printf '"sensor%d":' \
-            "$((count + 1))"
-
-
-        output_sensor \
-            "$sensor_label" \
-            "$rrd_path/$sensor_name.rrd"
-
-
         count="$((count + 1))"
+
+        case "$count" in
+
+            1)
+                sensor_file1="$sensor_file"
+                sensor_label1="$sensor_label"
+                ;;
+
+            2)
+                sensor_file2="$sensor_file"
+                sensor_label2="$sensor_label"
+                ;;
+
+        esac
 
 
         #
@@ -249,11 +203,34 @@ output_graph()
     done
 
 
-    if [ "$count" -eq 0 ]; then
-        printf '"error":"Graph not configured"'
-    fi
-}
+    case "$count" in
 
+        0)
+            printf '{"error":"Graph not configured"}'
+            ;;
+
+        1)
+            rrdtool xport \
+                --json \
+                --start "$start" \
+                "DEF:s1=$sensor_file1:temp:AVERAGE" \
+                "XPORT:s1:$sensor_label1" \
+                2>/dev/null
+            ;;
+
+        *)
+            rrdtool xport \
+                --json \
+                --start "$start" \
+                "DEF:s1=$sensor_file1:temp:AVERAGE" \
+                "DEF:s2=$sensor_file2:temp:AVERAGE" \
+                "XPORT:s1:$sensor_label1" \
+                "XPORT:s2:$sensor_label2" \
+                2>/dev/null
+            ;;
+
+    esac
+}
 
 output_list()
 {
@@ -351,6 +328,5 @@ if [ -z "$graph" ]; then
 fi
 
 
-printf '{'
 output_graph "$graph"
-printf '}\n'
+printf '\n'

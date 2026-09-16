@@ -6,10 +6,7 @@ PKG_RELEASE:=1
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
-
-# Adjust this path to the local mqtt-tempd source directory.
-#
-SOURCE_DIR:=/path/to/mqtt-tempd
+SRC_DIR:=/home/elux/Downloads/OpenWRT/mqtt-tempd
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -73,6 +70,10 @@ define Package/mqtt-tempd/install
 	$(INSTALL_DIR) $(1)/www
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/temperatur.html \
 		$(1)/www/temperatur.html
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/luci-plot.js \
+		$(1)/www/luci-plot.js
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/luci-plot.css \
+		$(1)/www/luci-plot.css	
 endef
 
 

@@ -21,14 +21,6 @@
             margin-bottom: 30px;
         }
 
-        canvas {
-            display: block;
-            width: 100%;
-            height: 350px;
-            border: 1px solid #888;
-            box-sizing: border-box;
-        }
-
         .controls button {
             padding: 6px 12px;
             margin-right: 4px;
@@ -66,7 +58,7 @@
 
 <div id="graphs"></div>
 
-
+<script src="/luci-plot.js"></script>
 <script>
 
 let currentRange;
@@ -153,24 +145,24 @@ function createGraphs(configuration)
             graphName;
 
 
-        const canvas =
-            document.createElement("canvas");
+        const plot =
+            document.createElement("div");
 
-        canvas.id =
+        plot.id =
             "graph-" + i;
-
 
         block.appendChild(
             heading
         );
 
         block.appendChild(
-            canvas
+            plot
         );
 
         container.appendChild(
             block
         );
+
     }
 }
 
@@ -178,574 +170,114 @@ function createGraphs(configuration)
 /*
  * Einen Graphen zeichnen.
  */
-function drawGraph(canvasId, json)
+function drawGraph(plotId, json)
 {
-    const canvas =
-        document.getElementById(canvasId);
+    const target =
+        document.getElementById(
+            plotId
+        );
 
 
-    if (canvas == null) {
+    if (target == null) {
         return;
     }
 
 
-    const displayWidth =
-        canvas.clientWidth;
+    if (!json.meta ||
+        !Array.isArray(json.data) ||
+        !Array.isArray(json.meta.legend)) {
 
-    const displayHeight =
-        canvas.clientHeight;
-
-
-    canvas.width =
-        displayWidth;
-
-    canvas.height =
-        displayHeight;
-
-
-    const ctx =
-        canvas.getContext("2d");
-
-    const width =
-        canvas.width;
-
-    const height =
-        canvas.height;
-
-
-    const marginLeft = 70;
-    const marginRight = 20;
-    const marginTop = 40;
-    const marginBottom = 50;
-
-
-    const graphWidth =
-        width -
-        marginLeft -
-        marginRight;
-
-    const graphHeight =
-        height -
-        marginTop -
-        marginBottom;
-
-
-    const sensor1 =
-        json.sensor1;
-
-    const sensor2 =
-        json.sensor2;
-
-
-    const data1 =
-        sensor1 ?
-        sensor1.data :
-        [];
-
-    const data2 =
-        sensor2 ?
-        sensor2.data :
-        [];
-
-
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-    );
-
-
-    if ((data1.length < 2) &&
-        (data2.length < 2)) {
-
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.font =
-            "14px sans-serif";
-
-        ctx.fillText(
-            "Keine Daten vorhanden",
-            marginLeft,
-            marginTop + 20
-        );
+        target.textContent =
+            "Keine Daten vorhanden";
 
         return;
     }
 
 
-    /*
-     * Alle vorhandenen Daten zusammenfassen,
-     * um die gemeinsame Y-Skalierung zu
-     * bestimmen.
-     */
-    const allData =
-        data1.concat(data2);
+    const entries = [];
 
+    const start =
+        Number(json.meta.start);
 
-    /*
-     * X-Achse immer über den vollständig
-     * ausgewählten Zeitraum darstellen.
-     */
-    const maxTime =
-        Math.floor(
-            Date.now() / 1000
-        );
-
-    let minTime;
-
-
-    switch (currentRange) {
-
-        case "1h":
-
-            minTime =
-                maxTime -
-                60 * 60;
-
-            break;
-
-
-        case "24h":
-
-            minTime =
-                maxTime -
-                24 * 60 * 60;
-
-            break;
-
-
-        case "7d":
-
-            minTime =
-                maxTime -
-                7 * 24 * 60 * 60;
-
-            break;
-
-
-        case "30d":
-
-            minTime =
-                maxTime -
-                30 * 24 * 60 * 60;
-
-            break;
-
-
-        case "1y":
-
-            minTime =
-                maxTime -
-                365 * 24 * 60 * 60;
-
-            break;
-
-
-        default:
-
-            minTime =
-                maxTime -
-                60 * 60;
-
-            break;
-    }
-
-
-    /*
-     * Y-Bereich aus den tatsächlich
-     * vorhandenen Messdaten bestimmen.
-     */
-    let minTemp =
-        allData[0][1];
-
-    let maxTemp =
-        allData[0][1];
-
-
-    for (const point of allData) {
-
-        if (point[1] < minTemp) {
-            minTemp = point[1];
-        }
-
-        if (point[1] > maxTemp) {
-            maxTemp = point[1];
-        }
-    }
-
-
-    /*
-     * Etwas Abstand oberhalb und
-     * unterhalb der Messwerte.
-     */
-    minTemp =
-        Math.floor(
-            minTemp - 1
-        );
-
-    maxTemp =
-        Math.ceil(
-            maxTemp + 1
-        );
-
-
-    if (minTemp === maxTemp) {
-        minTemp -= 1;
-        maxTemp += 1;
-    }
-
-
-    ctx.font =
-        "12px sans-serif";
-
-
-    /*
-     * Horizontales Gitter und Y-Achse.
-     */
-    const ySteps = 5;
-
-    ctx.lineWidth = 1;
+    const step =
+        Number(json.meta.step);
 
 
     for (let i = 0;
-         i <= ySteps;
+         i < json.data.length;
          i++) {
 
-        const value =
-            minTemp +
-            (maxTemp - minTemp) *
-            i / ySteps;
+        const row =
+            json.data[i];
 
-        const y =
-            marginTop +
-            graphHeight -
-            graphHeight *
-            i / ySteps;
+        const entry = {
+            timestamp:
+                start + i * step
+        };
 
 
-        ctx.strokeStyle =
-            "#cccccc";
+        for (let column = 0;
+             column < row.length;
+             column++) {
 
-        ctx.beginPath();
-
-        ctx.moveTo(
-            marginLeft,
-            y
-        );
-
-        ctx.lineTo(
-            width - marginRight,
-            y
-        );
-
-        ctx.stroke();
+            entry[
+                "sensor" + column
+            ] = row[column];
+        }
 
 
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.fillText(
-            value.toFixed(1) +
-            " °C",
-            5,
-            y + 4
+        entries.push(
+            entry
         );
     }
 
 
-    /*
-     * Senkrechtes Gitter und X-Achse.
-     */
-    const xSteps = 6;
-
+    const series = [];
 
     for (let i = 0;
-         i <= xSteps;
+         i < json.meta.legend.length;
          i++) {
 
-        const timestamp =
-            minTime +
-            (maxTime - minTime) *
-            i / xSteps;
+        series.push({
+            key:
+                "sensor" + i,
 
-        const x =
-            marginLeft +
-            graphWidth *
-            i / xSteps;
+            label:
+                json.meta.legend[i],
 
+            unit:
+                "°C",
 
-        ctx.strokeStyle =
-            "#eeeeee";
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x,
-            marginTop
-        );
-
-        ctx.lineTo(
-            x,
-            height - marginBottom
-        );
-
-        ctx.stroke();
-
-
-        const date =
-            new Date(
-                timestamp * 1000
-            );
-
-
-        let text;
-
-
-        switch (currentRange) {
-
-            case "1h":
-            case "24h":
-
-                text =
-                    date.toLocaleTimeString(
-                        "de-DE",
-                        {
-                            hour:
-                                "2-digit",
-
-                            minute:
-                                "2-digit"
-                        }
-                    );
-
-                break;
-
-
-            case "7d":
-            case "30d":
-
-                text =
-                    date.toLocaleDateString(
-                        "de-DE",
-                        {
-                            day:
-                                "2-digit",
-
-                            month:
-                                "2-digit"
-                        }
-                    );
-
-                break;
-
-
-            case "1y":
-
-                text =
-                    date.toLocaleDateString(
-                        "de-DE",
-                        {
-                            month:
-                                "2-digit",
-
-                            year:
-                                "2-digit"
-                        }
-                    );
-
-                break;
-
-
-            default:
-
-                text =
-                    date.toLocaleTimeString(
-                        "de-DE",
-                        {
-                            hour:
-                                "2-digit",
-
-                            minute:
-                                "2-digit"
-                        }
-                    );
-
-                break;
-        }
-
-
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.fillText(
-            text,
-            x - 16,
-            height - 20
-        );
+            digits:
+                1
+        });
     }
 
 
-    /*
-     * Eine Messkurve zeichnen.
-     */
-    function drawLine(data, color)
-    {
-        if (data.length < 2) {
-            return;
+    LuciPlot.render(
+        target,
+        entries,
+        {
+            x: {
+                key:
+                    "timestamp",
+
+                type:
+                    "time"
+            },
+
+            axes: {
+                default: {
+                    unit:
+                        "°C"
+                }
+            },
+
+            series:
+                series
         }
-
-
-        ctx.strokeStyle =
-            color;
-
-        ctx.lineWidth = 2;
-
-        ctx.beginPath();
-
-
-        for (let i = 0;
-             i < data.length;
-             i++) {
-
-            const time =
-                data[i][0];
-
-            const temp =
-                data[i][1];
-
-
-            const x =
-                marginLeft +
-                (time - minTime) /
-                (maxTime - minTime) *
-                graphWidth;
-
-
-            const y =
-                marginTop +
-                graphHeight -
-                (temp - minTemp) /
-                (maxTemp - minTemp) *
-                graphHeight;
-
-
-            if (i === 0) {
-
-                ctx.moveTo(
-                    x,
-                    y
-                );
-
-            } else {
-
-                ctx.lineTo(
-                    x,
-                    y
-                );
-            }
-        }
-
-
-        ctx.stroke();
-    }
-
-
-    /*
-     * Sensor 1.
-     */
-    drawLine(
-        data1,
-        "#cc0000"
     );
-
-
-    /*
-     * Sensor 2.
-     */
-    drawLine(
-        data2,
-        "#0066cc"
-    );
-
-
-    /*
-     * Legende.
-     */
-    let legendX =
-        marginLeft;
-
-
-    if (sensor1 != null) {
-
-        ctx.strokeStyle =
-            "#cc0000";
-
-        ctx.lineWidth = 3;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            legendX,
-            18
-        );
-
-        ctx.lineTo(
-            legendX + 25,
-            18
-        );
-
-        ctx.stroke();
-
-
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.fillText(
-            sensor1.name,
-            legendX + 32,
-            22
-        );
-
-
-        legendX += 200;
-    }
-
-
-    if (sensor2 != null) {
-
-        ctx.strokeStyle =
-            "#0066cc";
-
-        ctx.lineWidth = 3;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            legendX,
-            18
-        );
-
-        ctx.lineTo(
-            legendX + 25,
-            18
-        );
-
-        ctx.stroke();
-
-
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.fillText(
-            sensor2.name,
-            legendX + 32,
-            22
-        );
-    }
 }
-
 
 /*
  * Alle konfigurierten Graphen aktualisieren.
