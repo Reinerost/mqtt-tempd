@@ -18,7 +18,7 @@ define Package/mqtt-tempd
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=MQTT temperature daemon
-  DEPENDS:=+libuci +libmosquitto-nossl +librrd
+  DEPENDS:=+libuci +libmosquitto-nossl +librrd_hl
 endef
 
 
